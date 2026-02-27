@@ -1,0 +1,51 @@
+{
+  "updated_at": "2026-02-26T08:30:00",
+  "houses": {
+    "prisma": {
+      "name": "Prisma",
+      "leader": "Diogo",
+      "sensibility": "TCC e Comportamentais",
+      "motto": "Decompor a complexidade em clareza",
+      "therapists_count": 16,
+      "active_patients": 48
+    },
+    "macondo": {
+      "name": "Macondo",
+      "leader": "Flávia",
+      "sensibility": "Psicodinâmica",
+      "motto": "A magia habita a realidade",
+      "therapists_count": 14,
+      "active_patients": 42
+    },
+    "marmoris": {
+      "name": "Marmoris",
+      "leader": "Alice Guedon",
+      "sensibility": "Humanista",
+      "motto": "O brilho do sol refletido no mar",
+      "therapists_count": 12,
+      "active_patients": 36
+    }
+  },
+  "periods": {
+    "current": {
+      "label": "Fevereiro 2026",
+      "kpis": {
+        "adimplencia": { "prisma": 87.5, "macondo": 78.6, "marmoris": 91.7 },
+        "sessoes_paciente": { "prisma": 3.4, "macondo": 3.1, "marmoris": 3.6 },
+        "qualidade": { "prisma": 8.2, "macondo": 7.8, "marmoris": 8.9 },
+        "comparecimento": { "prisma": 89.3, "macondo": 82.1, "marmoris": 86.5 },
+        "evolucao_ors": { "prisma": 4.7, "macondo": 6.2, "marmoris": 5.3 }
+      }
+    },
+    "accumulated": {
+      "label": "Dez 2025 — Fev 2026",
+      "kpis": {
+        "adimplencia": { "prisma": 84.2, "macondo": 76.1, "marmoris": 88.9 },
+        "sessoes_paciente": { "prisma": 9.8, "macondo": 8.7, "marmoris": 10.2 },
+        "qualidade": { "prisma": 8.0, "macondo": 7.6, "marmoris": 8.7 },
+        "comparecimento": { "prisma": 87.1, "macondo": 80.5, "marmoris": 84.8 },
+        "evolucao_ors": { "prisma": 5.1, "macondo": 6.8, "marmoris": 5.9 }
+      }
+    }
+  }
+}
