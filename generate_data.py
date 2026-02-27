@@ -9,9 +9,6 @@ Uso:
 
 Saída:
     data.json - Arquivo JSON com KPIs por Casa e período
-
-Agendamento sugerido (GitHub Actions, cron, etc.):
-    Rodar 1-2x por dia para manter o dashboard atualizado.
 """
 
 import json
@@ -28,15 +25,12 @@ DATABASE_URL = (
     "/hamiton?sslmode=require"
 )
 
-# Mapeamento de nucleos (nome no banco → chave no JSON)
-# Ajuste se os nomes no banco forem diferentes
 NUCLEO_MAP = {
     "Prisma": "prisma",
     "Macondo": "macondo",
     "Marmoris": "marmoris",
 }
 
-# Informações estáticas das Casas
 HOUSE_INFO = {
     "prisma": {
         "name": "Prisma",
@@ -59,19 +53,22 @@ HOUSE_INFO = {
 }
 
 
-# ── Funções de Extração ──────────────────────────────────────────────────────
-
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def get_connection():
-    """Cria conexão com o banco."""
     return psycopg2.connect(DATABASE_URL)
 
 
+def count_months(date_start, date_end):
+    """Conta quantos meses distintos existem no intervalo (mínimo 1)."""
+    months = (date_end.year - date_start.year) * 12 + (date_end.month - date_start.month) + 1
+    return max(months, 1)
+
+
+# ── Funções de Extração ──────────────────────────────────────────────────────
+
 def get_house_basics(cur):
-    """
-    Conta terapeutas ativos e pacientes ativos por Casa.
-    Paciente ativo = tem fk_terapeuta apontando para terapeuta ativo com nucleo válido.
-    """
+    """Terapeutas ativos e pacientes ativos por Casa."""
     cur.execute("""
         SELECT
             n.nucleo AS casa,
@@ -97,9 +94,11 @@ def get_house_basics(cur):
 
 def get_adimplencia(cur, date_start, date_end):
     """
-    Adimplência = nº de pagamentos / nº de pacientes ativos por Casa no período.
-    Retorna percentual (0-100).
+    Adimplência = (pagamentos no período) / (pacientes ativos × meses) × 100.
+    Normaliza por número de meses para que o acumulado não passe de 100%.
     """
+    num_months = count_months(date_start, date_end)
+
     cur.execute("""
         WITH pacientes_ativos AS (
             SELECT
@@ -130,25 +129,26 @@ def get_adimplencia(cur, date_start, date_end):
             pa.total_pacientes,
             CASE
                 WHEN pa.total_pacientes > 0
-                THEN ROUND((COALESCE(pp.total_pagamentos, 0)::numeric / pa.total_pacientes) * 100, 1)
+                THEN ROUND(
+                    (COALESCE(pp.total_pagamentos, 0)::numeric / (pa.total_pacientes * %s)) * 100,
+                    1
+                )
                 ELSE 0
             END AS taxa
         FROM pacientes_ativos pa
         LEFT JOIN pagamentos_periodo pp ON pa.casa = pp.casa
-    """, (date_start, date_end))
+    """, (date_start, date_end, num_months))
 
     results = {}
     for row in cur.fetchall():
         key = NUCLEO_MAP.get(row["casa"])
         if key:
-            results[key] = float(row["taxa"])
+            results[key] = min(float(row["taxa"]), 100.0)
     return results
 
 
 def get_sessoes_por_paciente(cur, date_start, date_end):
-    """
-    Sessões por paciente = total de sessões realizadas / pacientes distintos no período.
-    """
+    """Sessões realizadas por paciente no período."""
     cur.execute("""
         SELECT
             n.nucleo AS casa,
@@ -179,19 +179,20 @@ def get_sessoes_por_paciente(cur, date_start, date_end):
 
 def get_qualidade(cur, date_start, date_end):
     """
-    Qualidade = média de qualidade_geral das avaliações no período (escala 0-10).
+    Qualidade = média de qualidade_geral das avaliações no período (0-10).
+    Usa created_at para filtrar por data (campo seguro que existe na tabela).
     """
     cur.execute("""
         SELECT
             n.nucleo AS casa,
             ROUND(AVG(a.qualidade_geral)::numeric, 1) AS media_qualidade,
             COUNT(a.pk_avaliacao) AS total_avaliacoes
-        FROM avaliação a
+        FROM "avaliação" a
         JOIN terapeutas t ON a.fk_terapeuta = t.pk_terapeuta
         JOIN nucleos n ON t.fk_nucleo = n.pk_nucleo
         WHERE a.qualidade_geral IS NOT NULL
-          AND a.dat_consulta >= %s
-          AND a.dat_consulta <= %s
+          AND a.created_at >= %s
+          AND a.created_at < (%s::date + interval '1 day')
           AND n.nucleo IN ('Prisma', 'Macondo', 'Marmoris')
         GROUP BY n.nucleo
     """, (date_start, date_end))
@@ -205,10 +206,7 @@ def get_qualidade(cur, date_start, date_end):
 
 
 def get_comparecimento(cur, date_start, date_end):
-    """
-    Taxa de comparecimento = sessões realizadas / total de sessões agendadas (até hoje).
-    Filtra consultas com dat_consulta <= hoje para excluir futuras.
-    """
+    """Taxa de comparecimento = realizadas / total agendado (até hoje)."""
     today = date.today()
     effective_end = min(date_end, today)
 
@@ -244,17 +242,8 @@ def get_comparecimento(cur, date_start, date_end):
 
 def get_evolucao_ors(cur):
     """
-    Evolução clínica (ORS) = média de (ORS_saída - ORS_entrada) por Casa.
-    
-    Lógica:
-    1. Filtra avaliações de 'Entrada' (primeira sessão)
-    2. Filtra avaliações de 'Saída' (encerramento)
-    3. Inner Join por fk_paciente (ciclo completo)
-    4. Calcula delta = soma_saida - soma_entrada
-    5. Agrupa por Casa do terapeuta
-    
-    Nota: Este KPI é acumulado (não faz sentido filtrar por mês,
-    pois entrada e saída podem estar em meses diferentes).
+    Evolução clínica = média de (ORS_saída - ORS_entrada) por Casa.
+    Inner join por fk_paciente garante só ciclos completos.
     """
     cur.execute("""
         WITH entrada AS (
@@ -263,7 +252,7 @@ def get_evolucao_ors(cur):
                 a.fk_terapeuta,
                 (COALESCE(a.individual, 0) + COALESCE(a.interpessoal, 0) +
                  COALESCE(a.social, 0) + COALESCE(a.geral, 0)) AS ors_entrada
-            FROM avaliação a
+            FROM "avaliação" a
             WHERE LOWER(TRIM(a.momento)) LIKE '%%entrada%%'
               AND a.individual IS NOT NULL
         ),
@@ -273,7 +262,7 @@ def get_evolucao_ors(cur):
                 a.fk_terapeuta,
                 (COALESCE(a.individual, 0) + COALESCE(a.interpessoal, 0) +
                  COALESCE(a.social, 0) + COALESCE(a.geral, 0)) AS ors_saida
-            FROM avaliação a
+            FROM "avaliação" a
             WHERE (LOWER(TRIM(a.momento)) LIKE '%%saída%%'
                    OR LOWER(TRIM(a.momento)) LIKE '%%saida%%')
               AND a.individual IS NOT NULL
@@ -300,9 +289,7 @@ def get_evolucao_ors(cur):
 
 # ── Geração do JSON ──────────────────────────────────────────────────────────
 
-
 def generate_data():
-    """Gera o JSON completo com todos os KPIs."""
     print("=" * 60)
     print("ARENA DAS CASAS - Geração de Dados")
     print("=" * 60)
@@ -312,7 +299,6 @@ def generate_data():
 
     today = date.today()
 
-    # Períodos
     current_month_start = today.replace(day=1)
     current_month_end = today
 
@@ -321,15 +307,14 @@ def generate_data():
 
     print(f"\nPeríodo atual: {current_month_start} → {current_month_end}")
     print(f"Acumulado:     {accumulated_start} → {accumulated_end}")
+    print(f"Meses no acumulado: {count_months(accumulated_start, accumulated_end)}")
 
-    # ── Dados básicos das Casas ──
     print("\n[1/6] Dados básicos das Casas...")
     basics = get_house_basics(cur)
     print(f"  ✓ {len(basics)} casas encontradas")
     for key, val in basics.items():
         print(f"    {key}: {val['therapists_count']} terapeutas, {val['active_patients']} pacientes")
 
-    # ── KPIs do mês atual ──
     print("\n[2/6] Adimplência...")
     adimplencia_current = get_adimplencia(cur, current_month_start, current_month_end)
     adimplencia_accum = get_adimplencia(cur, accumulated_start, accumulated_end)
@@ -362,18 +347,17 @@ def generate_data():
     conn.close()
 
     # ── Montar JSON ──
-    # Labels dos períodos
     meses_pt = {
         1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril",
         5: "Maio", 6: "Junho", 7: "Julho", 8: "Agosto",
         9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro",
     }
+
     current_label = f"{meses_pt[today.month]} {today.year}"
     accum_start_label = f"{meses_pt[accumulated_start.month][:3]} {accumulated_start.year}"
     accum_end_label = f"{meses_pt[today.month][:3]} {today.year}"
     accumulated_label = f"{accum_start_label} — {accum_end_label}"
 
-    # Montar houses
     houses = {}
     for key in ["prisma", "macondo", "marmoris"]:
         houses[key] = {
@@ -382,7 +366,6 @@ def generate_data():
             "active_patients": basics.get(key, {}).get("active_patients", 0),
         }
 
-    # Garantir que todas as casas têm valor (0 se não encontrado)
     def safe_kpi(data_dict):
         return {
             "prisma": data_dict.get("prisma", 0),
@@ -401,7 +384,7 @@ def generate_data():
                     "sessoes_paciente": safe_kpi(sessoes_current),
                     "qualidade": safe_kpi(qualidade_current),
                     "comparecimento": safe_kpi(comparecimento_current),
-                    "evolucao_ors": safe_kpi(ors),  # ORS é sempre acumulado
+                    "evolucao_ors": safe_kpi(ors),
                 },
             },
             "accumulated": {
@@ -411,19 +394,22 @@ def generate_data():
                     "sessoes_paciente": safe_kpi(sessoes_accum),
                     "qualidade": safe_kpi(qualidade_accum),
                     "comparecimento": safe_kpi(comparecimento_accum),
-                    "evolucao_ors": safe_kpi(ors),  # ORS é sempre acumulado
+                    "evolucao_ors": safe_kpi(ors),
                 },
             },
         },
     }
 
-    # Salvar
     with open("data.json", "w", encoding="utf-8") as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
 
     print("\n" + "=" * 60)
     print("✅ data.json gerado com sucesso!")
     print("=" * 60)
+    print(f"\nResumo:")
+    print(f"  Prisma:   {houses['prisma']['therapists_count']}T / {houses['prisma']['active_patients']}P")
+    print(f"  Macondo:  {houses['macondo']['therapists_count']}T / {houses['macondo']['active_patients']}P")
+    print(f"  Marmoris: {houses['marmoris']['therapists_count']}T / {houses['marmoris']['active_patients']}P")
 
     return output
 

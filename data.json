@@ -1,50 +1,90 @@
 {
-  "updated_at": "2026-02-26T08:30:00",
+  "updated_at": "2026-02-26T23:59:46.508943",
   "houses": {
     "prisma": {
       "name": "Prisma",
       "leader": "Diogo",
       "sensibility": "TCC e Comportamentais",
       "motto": "Decompor a complexidade em clareza",
-      "therapists_count": 16,
-      "active_patients": 48
+      "therapists_count": 8,
+      "active_patients": 49
     },
     "macondo": {
       "name": "Macondo",
       "leader": "Flávia",
       "sensibility": "Psicodinâmica",
       "motto": "A magia habita a realidade",
-      "therapists_count": 14,
-      "active_patients": 42
+      "therapists_count": 9,
+      "active_patients": 58
     },
     "marmoris": {
       "name": "Marmoris",
       "leader": "Alice Guedon",
       "sensibility": "Humanista",
       "motto": "O brilho do sol refletido no mar",
-      "therapists_count": 12,
-      "active_patients": 36
+      "therapists_count": 7,
+      "active_patients": 52
     }
   },
   "periods": {
     "current": {
       "label": "Fevereiro 2026",
       "kpis": {
-        "adimplencia": { "prisma": 87.5, "macondo": 78.6, "marmoris": 91.7 },
-        "sessoes_paciente": { "prisma": 3.4, "macondo": 3.1, "marmoris": 3.6 },
-        "qualidade": { "prisma": 8.2, "macondo": 7.8, "marmoris": 8.9 },
-        "comparecimento": { "prisma": 89.3, "macondo": 82.1, "marmoris": 86.5 },
-        "evolucao_ors": { "prisma": 4.7, "macondo": 6.2, "marmoris": 5.3 }
+        "adimplencia": {
+          "prisma": 63.3,
+          "macondo": 60.3,
+          "marmoris": 76.9
+        },
+        "sessoes_paciente": {
+          "prisma": 2.0,
+          "macondo": 2.1,
+          "marmoris": 2.7
+        },
+        "qualidade": {
+          "prisma": 9.3,
+          "macondo": 7.5,
+          "marmoris": 10.0
+        },
+        "comparecimento": {
+          "prisma": 85.2,
+          "macondo": 76.6,
+          "marmoris": 90.4
+        },
+        "evolucao_ors": {
+          "prisma": 0,
+          "macondo": 0,
+          "marmoris": 0
+        }
       }
     },
     "accumulated": {
       "label": "Dez 2025 — Fev 2026",
       "kpis": {
-        "adimplencia": { "prisma": 84.2, "macondo": 76.1, "marmoris": 88.9 },
-        "sessoes_paciente": { "prisma": 9.8, "macondo": 8.7, "marmoris": 10.2 },
-        "qualidade": { "prisma": 8.0, "macondo": 7.6, "marmoris": 8.7 },
-        "comparecimento": { "prisma": 87.1, "macondo": 80.5, "marmoris": 84.8 },
-        "evolucao_ors": { "prisma": 5.1, "macondo": 6.8, "marmoris": 5.9 }
+        "adimplencia": {
+          "prisma": 59.9,
+          "macondo": 63.8,
+          "marmoris": 71.8
+        },
+        "sessoes_paciente": {
+          "prisma": 4.2,
+          "macondo": 5.1,
+          "marmoris": 5.9
+        },
+        "qualidade": {
+          "prisma": 9.7,
+          "macondo": 9.2,
+          "marmoris": 9.8
+        },
+        "comparecimento": {
+          "prisma": 87.2,
+          "macondo": 80.8,
+          "marmoris": 82.9
+        },
+        "evolucao_ors": {
+          "prisma": 0,
+          "macondo": 0,
+          "marmoris": 0
+        }
       }
     }
   }
