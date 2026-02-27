@@ -31,6 +31,9 @@ NUCLEO_MAP = {
     "Marmoris": "marmoris",
 }
 
+# Captações a ignorar no cálculo de adimplência (pacientes de prefeitura)
+CAPTACOES_IGNORAR = [13, 46]  # 13 = Prefeitura de Bela Vista de Minas, 46 = outra prefeitura
+
 HOUSE_INFO = {
     "prisma": {
         "name": "Prisma",
@@ -98,8 +101,9 @@ def get_adimplencia(cur, date_start, date_end):
     Normaliza por número de meses para que o acumulado não passe de 100%.
     """
     num_months = count_months(date_start, date_end)
+    captacoes_placeholder = ','.join(str(c) for c in CAPTACOES_IGNORAR)
 
-    cur.execute("""
+    cur.execute(f"""
         WITH pacientes_ativos AS (
             SELECT
                 n.nucleo AS casa,
@@ -108,6 +112,7 @@ def get_adimplencia(cur, date_start, date_end):
             JOIN terapeutas t ON p.fk_terapeuta = t.pk_terapeuta
             JOIN nucleos n ON t.fk_nucleo = n.pk_nucleo
             WHERE t.is_active = true
+              AND p.fk_captacao NOT IN ({captacoes_placeholder})
               AND n.nucleo IN ('Prisma', 'Macondo', 'Marmoris')
             GROUP BY n.nucleo
         ),
@@ -116,10 +121,12 @@ def get_adimplencia(cur, date_start, date_end):
                 n.nucleo AS casa,
                 COUNT(DISTINCT pg.pk_pagamento) AS total_pagamentos
             FROM pagamento pg
+            JOIN pacientes p ON pg.fk_paciente_id = p.pk_paciente
             JOIN terapeutas t ON pg.fk_terapeuta_id = t.pk_terapeuta
             JOIN nucleos n ON t.fk_nucleo = n.pk_nucleo
             WHERE pg.dat_pagamento >= %s
               AND pg.dat_pagamento <= %s
+              AND p.fk_captacao NOT IN ({captacoes_placeholder})
               AND n.nucleo IN ('Prisma', 'Macondo', 'Marmoris')
             GROUP BY n.nucleo
         )
